@@ -45,13 +45,26 @@ Instructions:
  * Perform RAG: Retrieve relevant context and prepare for generation
  */
 export async function performRAG(query: string, topK: number = 5) {
+  console.log('🔍 RAG Query:', query);
+  
   // Generate embedding for the query
   const queryEmbedding = await generateEmbedding(query);
+  console.log('✅ Generated embedding, length:', queryEmbedding.length);
 
   // Search for similar documents
-  const documents = await searchSimilarDocuments(queryEmbedding, topK, 0.7);
+  const documents = await searchSimilarDocuments(queryEmbedding, topK, 0.5);
+  console.log('📚 Found documents:', documents?.length || 0);
+  
+  if (documents && documents.length > 0) {
+    console.log('Top 3 results:');
+    documents.slice(0, 3).forEach((doc, i) => {
+      console.log(`  ${i + 1}. Similarity: ${doc.similarity.toFixed(3)}, Doc: ${doc.metadata?.document}, Page: ${doc.metadata?.page}`);
+      console.log(`     Preview: ${doc.content.substring(0, 80)}...`);
+    });
+  }
 
   if (!documents || documents.length === 0) {
+    console.log('⚠️ No documents found - using fallback');
     return {
       context: '',
       sources: [],
@@ -61,6 +74,7 @@ export async function performRAG(query: string, topK: number = 5) {
 
   // Build context and sources
   const { context, sources } = buildContext(documents);
+  console.log('📝 Built context with', sources.length, 'sources');
 
   // Build system prompt
   const systemPrompt = buildSystemPrompt(context);

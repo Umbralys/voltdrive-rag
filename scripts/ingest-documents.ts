@@ -1,10 +1,13 @@
 import fs from 'fs';
 import path from 'path';
 import pdf from 'pdf-parse';
+import dotenv from 'dotenv';
+
+// Load environment variables
+dotenv.config({ path: '.env' });
+
 import { generateEmbedding } from '../lib/azure-openai';
 import { insertDocumentChunks, clearAllDocuments } from '../lib/supabase';
-
-
 
 interface DocumentChunk {
   content: string;
@@ -18,30 +21,46 @@ interface DocumentChunk {
 }
 
 /**
- * Split text into chunks of approximately maxTokens
+ * Split text into smaller, overlapping chunks for better retrieval
  */
-function chunkText(text: string, maxTokens: number = 500): string[] {
-  // Rough estimation: 1 token ≈ 4 characters
-  const maxChars = maxTokens * 4;
+function chunkText(text: string, chunkSize: number = 400, overlap: number = 80): string[] {
   const chunks: string[] = [];
   
-  // Split by paragraphs first
-  const paragraphs = text.split(/\n\n+/);
-  let currentChunk = '';
-
-  for (const para of paragraphs) {
-    if ((currentChunk + para).length > maxChars && currentChunk.length > 0) {
-      chunks.push(currentChunk.trim());
-      currentChunk = para;
-    } else {
-      currentChunk += (currentChunk ? '\n\n' : '') + para;
+  // Clean up text
+  const cleanText = text.replace(/\s+/g, ' ').trim();
+  
+  if (cleanText.length === 0) return [];
+  
+  // If text is shorter than chunk size, return as single chunk
+  if (cleanText.length <= chunkSize) {
+    return [cleanText];
+  }
+  
+  // Create overlapping chunks
+  let start = 0;
+  while (start < cleanText.length) {
+    let end = start + chunkSize;
+    
+    // Try to break at sentence boundary
+    if (end < cleanText.length) {
+      const sentenceEnd = cleanText.slice(start, end).lastIndexOf('. ');
+      if (sentenceEnd > chunkSize * 0.5) {
+        end = start + sentenceEnd + 1;
+      }
     }
+    
+    const chunk = cleanText.slice(start, end).trim();
+    if (chunk.length > 50) {
+      chunks.push(chunk);
+    }
+    
+    // Move start forward, accounting for overlap
+    start = end - overlap;
+    
+    // Prevent infinite loop
+    if (start >= cleanText.length) break;
   }
-
-  if (currentChunk) {
-    chunks.push(currentChunk.trim());
-  }
-
+  
   return chunks;
 }
 
@@ -52,22 +71,40 @@ async function processPDF(filePath: string): Promise<{ page: number; text: strin
   const dataBuffer = fs.readFileSync(filePath);
   const data = await pdf(dataBuffer);
   
-  // Extract text from each page
-  const pages: { page: number; text: string }[] = [];
-  
-  // pdf-parse doesn't give us per-page text easily, so we'll work with the full text
-  // and split it into reasonable chunks
   const fullText = data.text;
+  const numPages = data.numpages;
   
-  // For demo purposes, we'll estimate pages based on text length
-  // In production, you'd want a library that gives you per-page text
-  const estimatedCharsPerPage = 2000;
-  const textLength = fullText.length;
-  const estimatedPages = Math.ceil(textLength / estimatedCharsPerPage);
+  console.log(`   PDF has ${numPages} actual pages, ${fullText.length} characters`);
+  
+  // Use actual page count if available
+  if (numPages && numPages > 0) {
+    const charsPerPage = Math.ceil(fullText.length / numPages);
+    const pages: { page: number; text: string }[] = [];
+    
+    for (let i = 0; i < numPages; i++) {
+      const start = i * charsPerPage;
+      const end = Math.min((i + 1) * charsPerPage, fullText.length);
+      const pageText = fullText.slice(start, end);
+      
+      if (pageText.trim()) {
+        pages.push({
+          page: i + 1,
+          text: pageText,
+        });
+      }
+    }
+    
+    return pages;
+  }
+  
+  // Fallback: estimate pages
+  const estimatedCharsPerPage = 1500;
+  const estimatedPages = Math.ceil(fullText.length / estimatedCharsPerPage);
+  const pages: { page: number; text: string }[] = [];
   
   for (let i = 0; i < estimatedPages; i++) {
     const start = i * estimatedCharsPerPage;
-    const end = Math.min((i + 1) * estimatedCharsPerPage, textLength);
+    const end = Math.min((i + 1) * estimatedCharsPerPage, fullText.length);
     const pageText = fullText.slice(start, end);
     
     if (pageText.trim()) {
@@ -87,7 +124,6 @@ async function processPDF(filePath: string): Promise<{ page: number; text: strin
 async function ingestDocuments() {
   console.log('🚀 Starting document ingestion...\n');
 
-  // Documents to process
   const documents = [
     {
       name: 'VoltDrive Troubleshooting Guide',
@@ -121,8 +157,8 @@ async function ingestDocuments() {
 
     // Process each page
     for (const { page, text } of pages) {
-      const chunks = chunkText(text);
-      console.log(`   Page ${page}: ${chunks.length} chunks`);
+      const chunks = chunkText(text, 400, 80);
+      console.log(`   Page ${page}: ${chunks.length} chunks (${text.length} chars)`);
 
       // Generate embeddings for each chunk
       for (let i = 0; i < chunks.length; i++) {
@@ -141,8 +177,8 @@ async function ingestDocuments() {
             },
           });
 
-          // Add a small delay to avoid rate limiting
-          await new Promise(resolve => setTimeout(resolve, 100));
+          // Add delay to avoid rate limiting
+          await new Promise(resolve => setTimeout(resolve, 200));
         } catch (error) {
           console.error(`   ❌ Error generating embedding for chunk ${i} on page ${page}:`, error);
         }
@@ -155,7 +191,7 @@ async function ingestDocuments() {
   // Insert all chunks into Supabase
   console.log(`💾 Inserting ${allChunks.length} chunks into database...`);
   
-  // Insert in batches of 50 to avoid payload limits
+  // Insert in batches
   const batchSize = 50;
   for (let i = 0; i < allChunks.length; i += batchSize) {
     const batch = allChunks.slice(i, i + batchSize);
