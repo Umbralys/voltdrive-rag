@@ -2,6 +2,8 @@
 
 import { Message } from '@/types';
 import SourceCitation from './SourceCitation';
+import remarkGfm from 'remark-gfm';
+import ReactMarkdown from 'react-markdown'; // MOD: Added this import
 
 interface MessageListProps {
   messages: Message[];
@@ -32,12 +34,13 @@ export default function MessageList({ messages, isLoading }: MessageListProps) {
             Welcome to VoltDrive Support
           </h2>
           <p className="text-gray-600 mb-6 max-w-md">
-            Ask me anything about your VoltDrive vehicle - troubleshooting, warranty, pricing, or features.
+            Ask me anything about your VoltDrive vehicle - troubleshooting,
+            warranty, pricing, or features.
           </p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 w-full max-w-2xl">
             {[
-              'Why won\'t my vehicle start?',
-              'What\'s covered under warranty?',
+              "Why won't my vehicle start?",
+              "What's covered under warranty?",
               'How do I improve my range?',
               'How much does maintenance cost?',
             ].map((suggestion, idx) => (
@@ -73,9 +76,25 @@ export default function MessageList({ messages, isLoading }: MessageListProps) {
                     : 'bg-white border border-gray-200 text-gray-800'
                 }`}
               >
-                <div className="whitespace-pre-wrap break-words">
-                  {message.content}
-                </div>
+                {/* MOD: Replaced the <div> with conditional logic.
+                  - Assistants get ReactMarkdown to render lists, bold, etc.
+                  - Users get the plain text div.
+                */}
+                {message.role === 'assistant' ? (
+                  <div className="prose prose-sm max-w-none"> {/* `prose` styles the markdown */}
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                    >
+                      {message.content}
+                    </ReactMarkdown>
+                  </div>
+                ) : (
+                  <div className="whitespace-pre-wrap break-words">
+                    {message.content}
+                  </div>
+                )}
+                {/* END MOD */}
+
                 {message.role === 'assistant' && message.sources && (
                   <SourceCitation sources={message.sources} />
                 )}
@@ -86,9 +105,18 @@ export default function MessageList({ messages, isLoading }: MessageListProps) {
             <div className="flex justify-start">
               <div className="max-w-[80%] rounded-2xl px-4 py-3 bg-white border border-gray-200">
                 <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                  <div
+                    className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
+                    style={{ animationDelay: '0ms' }}
+                  ></div>
+                  <div
+                    className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
+                    style={{ animationDelay: '150ms' }}
+                  ></div>
+                  <div
+                    className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
+                    style={{ animationDelay: '300ms' }}
+                  ></div>
                 </div>
               </div>
             </div>

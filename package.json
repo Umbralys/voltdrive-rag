@@ -8,7 +8,6 @@
     "start": "next start",
     "lint": "next lint",
     "ingest": "node --import tsx --env-file=.env scripts/ingest-documents.ts"
-    
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.39.0",
@@ -18,7 +17,9 @@
     "openai": "^4.24.1",
     "pdf-parse": "^1.1.1",
     "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "react-dom": "^18.2.0",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
     "@types/node": "^20.11.5",
