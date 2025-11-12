@@ -90,6 +90,7 @@ function calculateKeywordRelevance(query: string, content: string): number {
   
   const queryWords = query
     .toLowerCase()
+    .replace(/[^\w\s]/g, ' ') // Remove punctuation
     .split(/\s+/)
     .filter(word => word.length > 2 && !stopWords.has(word));
   
@@ -139,32 +140,19 @@ function rerankResults(
 }
 
 /**
- * Extract clean content from enriched chunks
- * Removes the metadata headers we added during ingestion
- */
-function extractCleanContent(enrichedContent: string): string {
-  // Remove [Source: ...] and [Section: ...] headers
-  return enrichedContent
-    .replace(/^\[Source:.*?\]\n/gm, '')
-    .replace(/^\[Section:.*?\]\n/gm, '')
-    .trim();
-}
-
-/**
- * Build context from retrieved documents with clean formatting
+ * Build context from retrieved documents
  */
 export function buildContext(documents: any[]): { context: string; sources: Source[] } {
   const sources: Source[] = documents.map((doc) => ({
     document: doc.metadata.document,
     page: doc.metadata.page,
-    content: extractCleanContent(doc.content), // Clean content for display
+    content: doc.content, // Already plain
     similarity: doc.similarity,
   }));
 
   const context = documents
     .map((doc, idx) => {
-      const cleanContent = extractCleanContent(doc.content);
-      return `[Source ${idx + 1}: ${doc.metadata.document}, Page ${doc.metadata.page}]\n${cleanContent}`;
+      return `[Source ${idx + 1}: ${doc.metadata.document}, Page ${doc.metadata.page}]\n${doc.content}`;
     })
     .join('\n\n---\n\n');
 
@@ -199,7 +187,7 @@ Instructions:
 export async function performRAG(
   query: string,
   topK: number = 8, // Retrieve more initially for re-ranking
-  similarityThreshold: number = 0.3 // Lower initial threshold
+  similarityThreshold: number = 0.2 // Lower threshold to get more candidates
 ) {
   console.log('🔍 RAG Query:', query);
   

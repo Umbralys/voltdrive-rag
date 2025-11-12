@@ -26,8 +26,8 @@ interface DocumentChunk {
  */
 function chunkTextSemantic(
   text: string, 
-  chunkSize: number = 1000, 
-  overlap: number = 200
+  chunkSize: number = 500,  // Reduced from 1000
+  overlap: number = 100      // Reduced from 200
 ): string[] {
   const chunks: string[] = [];
   
@@ -231,9 +231,9 @@ async function processPDF(filePath: string): Promise<{ page: number; text: strin
 async function ingestDocuments() {
   console.log('🚀 Starting IMPROVED document ingestion...\n');
   console.log('📈 Enhancements:');
-  console.log('   - Larger semantic chunks (1000 chars)');
+  console.log('   - Medium semantic chunks (500 chars)');
   console.log('   - Better sentence boundaries');
-  console.log('   - Context enrichment');
+  console.log('   - Context enrichment for embeddings');
   console.log('   - Section detection\n');
 
   const documents = [
@@ -270,8 +270,8 @@ async function ingestDocuments() {
 
     // Process each page
     for (const { page, text, section } of pages) {
-      // Use improved semantic chunking
-      const chunks = chunkTextSemantic(text, 1000, 200);
+      // Use improved semantic chunking with 500-char chunks
+      const chunks = chunkTextSemantic(text, 500, 100);
       console.log(`   Page ${page}: ${chunks.length} chunks (${text.length} chars)${section ? `, Section: ${section}` : ''}`);
       
       totalChunksCreated += chunks.length;
@@ -290,11 +290,13 @@ async function ingestDocuments() {
             chunks.length
           );
           
+          // Embed the enriched version (has context)
           const embedding = await generateEmbedding(enrichedChunk);
           
+          // But STORE the plain version (for keyword matching)
           allChunks.push({
-            content: enrichedChunk, // Store enriched version
-            embedding,
+            content: chunk, // Store PLAIN chunk for keyword matching
+            embedding,      // Use enriched embedding for semantic search
             metadata: {
               document: doc.name,
               page,
@@ -338,7 +340,7 @@ async function ingestDocuments() {
   console.log(`   - Chunks per document: ~${Math.round(allChunks.length / documents.length)}`);
   console.log('\n🎯 Expected improvements:');
   console.log('   - Better semantic coherence');
-  console.log('   - Higher similarity scores (target: 0.7-0.9+)');
+  console.log('   - Higher similarity scores (target: 0.75-0.95+)');
   console.log('   - More relevant retrievals');
 }
 
